@@ -1,23 +1,20 @@
 {
   "name": "La Calculadora de Pipizon",
   "short_name": "Pipizon",
-  "start_url": "./",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0F172A",
   "theme_color": "#10B981",
-  "orientation": "portrait",
   "icons": [
     {
-      "src": "./icon-192.png",
+      "src": "icon-192.png",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     },
     {
-      "src": "./icon-192.png",
+      "src": "icon-192.png",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     }
   ]
 }
