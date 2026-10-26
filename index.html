@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>La Calculadora de Pipizon</title>
+  <meta name="theme-color" content="#10B981">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Pipizon">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" href="./icon-192.png">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  
+  <!-- Registro del Service Worker para PWABuilder -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js')
+        .then(() => console.log('Service Worker registrado con éxito'))
+        .catch((error) => console.log('Error al registrar el Service Worker:', error));
+    }
+  </script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@0.383.0/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+    body { font-family: 'Plus Jakarta Sans', sans-serif; touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none; }
+    @keyframes pulse-red { 0%, 100% { background-color: rgba(239, 68, 68, 0.15); } 50% { background-color: rgba(239, 68, 68, 0.35); } }
+    .bg-alert-red { animation: pulse-red 1.2s infinite ease-in-out; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between max-w-md mx-auto shadow-2xl relative overflow-x-hidden border-x border-slate-800">
+  <header class="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 p-4 pb-3">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-xl shadow-lg shadow-emerald-500/20">🧮</div>
+        <div>
+          <h1 class="font-extrabold text-base tracking-tight text-white leading-none">La Calculadora de Pipizon</h1>
+          <p class="text-[11px] font-medium text-emerald-400 mt-0.5">Control Inteligente de Gastos</p>
+        </div>
+      </div>
+      <button onclick="shareToWsp()" class="p-2.5 bg-slate-800/80 hover:bg-slate-700 rounded-xl border border-slate-700/60 text-slate-300">
+        <i data-lucide="share-2" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div id="status-card" class="mt-3.5 p-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/50">
+      <div class="flex justify-between items-end mb-1.5">
+        <div>
+          <span class="text-[10px] font-bold uppercase text-slate-400">Total en Carrito</span>
+          <div class="flex items-baseline gap-1">
+            <span class="text-2xl font-extrabold text-white" id="total-amount">$0</span>
+            <span class="text-xs text-slate-400 font-semibold" id="item-count-badge">(0 ítems)</span>
+          </div>
+        </div>
+        <div class="text-right cursor-pointer" onclick="openBudgetModal()">
+          <span class="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-end gap-1">
+            Tope Máximo <i data-lucide="edit-2" class="w-2.5 h-2.5"></i>
+          </span>
+          <span class="text-base font-bold text-slate-200" id="budget-amount">$50.000</span>
+        </div>
+      </div>
+
+      <div class="w-full bg-slate-950/80 h-3 rounded-full overflow-hidden p-0.5 border border-slate-800">
+        <div id="progress-bar" class="h-full bg-emerald-500 rounded-full transition-all duration-500 w-0"></div>
+      </div>
+
+      <div class="flex justify-between items-center mt-2 text-[11px] font-semibold">
+        <span id="budget-percentage" class="text-emerald-400">0% consumido</span>
+        <span id="budget-remaining" class="text-slate-300">Disponible: $50.000</span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="flex border-b border-slate-800 bg-slate-900/40 text-xs font-bold text-slate-400">
+    <button onclick="switchTab('cart')" id="tab-cart" class="flex-1 py-2.5 text-center border-b-2 border-emerald-500 text-emerald-400 flex items-center justify-center gap-1.5">
+      <i data-lucide="shopping-cart" class="w-4 h-4"></i> Carrito
+    </button>
+    <button onclick="switchTab('planner')" id="tab-planner" class="flex-1 py-2.5 text-center border-b-2 border-transparent flex items-center justify-center gap-1.5">
+      <i data-lucide="list-checks" class="w-4 h-4"></i> Lista Previa
+    </button>
+    <button onclick="switchTab('history')" id="tab-history" class="flex-1 py-2.5 text-center border-b-2 border-transparent flex items-center justify-center gap-1.5">
+      <i data-lucide="history" class="w-4 h-4"></i> Historial
+    </button>
+  </nav>
+
+  <main class="flex-1 p-4 pb-28 overflow-y-auto">
+    <div id="view-cart" class="space-y-3">
+      <div class="flex gap-2">
+        <input type="text" id="quick-prod-name" placeholder="Producto (ej: Leche)" class="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+        <input type="number" id="quick-prod-price" placeholder="Precio ($)" class="w-28 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+        <button onclick="addQuickProduct()" class="bg-emerald-500 text-slate-950 p-2.5 rounded-xl font-bold flex items-center justify-center">
+          <i data-lucide="plus" class="w-5 h-5"></i>
+        </button>
+        <button onclick="triggerOcrScan()" class="bg-indigo-600 text-white p-2.5 rounded-xl font-bold flex items-center justify-center" title="Escanear etiqueta">
+          <i data-lucide="camera" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div id="empty-cart-msg" class="text-center py-10 text-slate-500">
+        <div class="w-14 h-14 mx-auto mb-3 rounded-full bg-slate-900 flex items-center justify-center text-slate-600 border border-slate-800">
+          <i data-lucide="shopping-bag" class="w-7 h-7"></i>
+        </div>
+        <p class="text-sm font-semibold text-slate-400">El carrito está vacío</p>
+      </div>
+
+      <div id="cart-list" class="space-y-2"></div>
+    </div>
+
+    <div id="view-planner" class="hidden space-y-3">
+      <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+        <div class="flex gap-2">
+          <input type="text" id="plan-prod-name" placeholder="¿Qué querés comprar?" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white">
+          <input type="number" id="plan-prod-price" placeholder="Est. ($)" class="w-24 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white">
+          <button onclick="addPlannedItem()" class="bg-slate-800 text-emerald-400 border border-emerald-500/30 px-3 rounded-xl font-bold text-xs">Añadir</button>
+        </div>
+      </div>
+      <div id="planner-list" class="space-y-2"></div>
+    </div>
+
+    <div id="view-history" class="hidden space-y-3">
+      <div id="history-comparison-card" class="hidden p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300"></div>
+      <div id="history-list" class="space-y-3"></div>
+    </div>
+  </main>
+
+  <div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-slate-900/90 backdrop-blur-md border-t border-slate-800 flex gap-2 z-20">
+    <button onclick="finishShopping()" class="flex-1 bg-emerald-500 text-slate-950 py-3 rounded-xl font-extrabold text-sm flex items-center justify-center gap-2">
+      <i data-lucide="check-circle" class="w-4 h-4"></i> Guardar Compra
+    </button>
+    <button onclick="clearCart()" class="bg-slate-800 text-slate-400 p-3 rounded-xl border border-slate-700/50">
+      <i data-lucide="trash-2" class="w-5 h-5"></i>
+    </button>
+  </div>
+
+  <div id="modal-budget" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 w-full max-w-xs rounded-2xl p-5">
+      <h3 class="text-base font-bold text-white mb-2">Establecer Tope</h3>
+      <input type="number" id="budget-input" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-lg font-bold text-emerald-400 text-center mb-3">
+      <div class="flex gap-2">
+        <button onclick="closeBudgetModal()" class="flex-1 bg-slate-800 text-slate-300 py-2.5 rounded-xl font-bold text-xs">Cancelar</button>
+        <button onclick="saveBudget()" class="flex-1 bg-emerald-500 text-slate-950 py-2.5 rounded-xl font-extrabold text-xs">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="ocr-file" accept="image/*" capture="environment" class="hidden" onchange="handleOcrFile(event)">
+
+  <div id="modal-ocr" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 w-full max-w-xs rounded-2xl p-5">
+      <div id="ocr-loading" class="hidden text-center py-6">
+        <p class="text-sm font-bold text-white">Leyendo etiqueta...</p>
+        <p class="text-xs text-slate-400 mt-1">Puede tardar unos segundos</p>
+      </div>
+      <div id="ocr-form" class="hidden">
+        <h3 class="text-base font-bold text-white mb-1">Revisá el producto</h3>
+        <p id="ocr-status" class="text-[11px] text-slate-400 mb-3">Corregí si hace falta antes de agregarlo.</p>
+        <input type="text" id="ocr-name" placeholder="Producto" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm text-white mb-2">
+        <input type="number" id="ocr-price" placeholder="Precio ($)" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm font-bold text-emerald-400 mb-3">
+        <div class="flex gap-2">
+          <button onclick="closeOcrModal()" class="flex-1 bg-slate-800 text-slate-300 py-2.5 rounded-xl font-bold text-xs">Cancelar</button>
+          <button onclick="addOcrItem()" class="flex-1 bg-emerald-500 text-slate-950 py-2.5 rounded-xl font-extrabold text-xs">Agregar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-scan" class="hidden fixed inset-0 z-50 bg-black flex flex-col items-center justify-center p-4">
+    <div class="relative w-full max-w-sm aspect-[3/4] bg-black rounded-2xl overflow-hidden">
+      <video id="scan-video" playsinline muted autoplay class="w-full h-full object-cover"></video>
+      <div class="absolute inset-x-8 top-1/3 h-28 border-2 border-emerald-400 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"></div>
+    </div>
+    <p id="scan-status" class="text-sm font-semibold text-white mt-4 text-center">Abriendo cámara...</p>
+    <p class="text-[11px] text-slate-400 mt-1 text-center">Centrá el nombre y el precio dentro del recuadro</p>
+    <button onclick="closeLiveScan()" class="mt-4 bg-slate-800 text-slate-200 px-6 py-2.5 rounded-xl font-bold text-xs">Cancelar</button>
+  </div>
+  <canvas id="scan-canvas" class="hidden"></canvas>
+
+  <button id="undo-btn" onclick="undoLast()" class="hidden fixed bottom-24 right-4 z-30 bg-slate-800 border border-slate-700 text-emerald-400 px-4 py-2.5 rounded-xl font-bold text-xs shadow-lg">↶ Deshacer</button>
+
+  <div id="modal-confirm" class="hidden fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 w-full max-w-xs rounded-2xl p-5 text-center">
+      <p id="confirm-msg" class="text-sm font-semibold text-white mb-4"></p>
+      <div class="flex gap-2">
+        <button onclick="closeConfirm()" class="flex-1 bg-slate-800 text-slate-300 py-2.5 rounded-xl font-bold text-xs">Cancelar</button>
+        <button onclick="confirmYes()" class="flex-1 bg-rose-500 text-white py-2.5 rounded-xl font-extrabold text-xs">Borrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let budget = 50000;
+    let cart = [];
+    let planner = [{ id: 1, name: 'Pan Lactal', price: 2100 }];
+    let history = [];
+    let alert90 = false, alert100 = false;
+
+    function esc(t) { return String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    function vibrateFor(type) {
+      if (!navigator.vibrate) return;
+      if (type === 'danger') navigator.vibrate([300, 150, 300, 150, 600]);
+      else if (type === 'warn') navigator.vibrate([200, 100, 200]);
+      else navigator.vibrate(30);
+    }
+
+    function playBeep(type) {
+      vibrateFor(type);
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.setValueAtTime(type === 'danger' ? 800 : (type === 'warn' ? 440 : 587), ctx.currentTime);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        osc.start(); osc.stop(ctx.currentTime + 0.3);
+      } catch (e) {}
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide) lucide.createIcons();
+      loadData();
+      render();
+    });
+
+    function loadData() {
+      if (localStorage.getItem('pip_b')) budget = parseFloat(localStorage.getItem('pip_b'));
+      if (localStorage.getItem('pip_c')) cart = JSON.parse(localStorage.getItem('pip_c'));
+      if (localStorage.getItem('pip_p')) planner = JSON.parse(localStorage.getItem('pip_p'));
+      if (localStorage.getItem('pip_h')) history = JSON.parse(localStorage.getItem('pip_h'));
+    }
+
+    function saveData() {
+      localStorage.setItem('pip_b', budget);
+      localStorage.setItem('pip_c', JSON.stringify(cart));
+      localStorage.setItem('pip_p', JSON.stringify(planner));
+      localStorage.setItem('pip_h', JSON.stringify(history));
+    }
+
+    function fmt(val) { return '$' + Math.round(val).toLocaleString('es-AR'); }
+
+    function render() {
+      const active = cart.filter(i => !i.crossed);
+      const total = active.reduce((a, b) => a + b.price, 0);
+      const pct = budget > 0 ? Math.min(Math.round((total / budget) * 100), 999) : 0;
+      const rem = budget - total;
+
+      document.getElementById('total-amount').innerText = fmt(total);
+      document.getElementById('item-count-badge').innerText = `(${active.length} ítems)`;
+      document.getElementById('budget-amount').innerText = fmt(budget);
+      document.getElementById('progress-bar').style.width = Math.min(pct, 100) + '%';
+      document.getElementById('budget-percentage').innerText = `${pct}% consumido`;
+      document.getElementById('budget-remaining').innerText = rem >= 0 ? `Disponible: ${fmt(rem)}` : `Excedido: ${fmt(Math.abs(rem))}`;
+
+      if (pct >= 100 && !alert100) { playBeep('danger'); alert100 = true; }
+      if (pct >= 90 && pct < 100 && !alert90) { playBeep('warn'); alert90 = true; }
+      if (pct < 90) { alert90 = false; alert100 = false; }
+
+      renderCart(); renderPlanner(); renderHistory(); saveData();
+    }
+
+    function renderCart() {
+      const container = document.getElementById('cart-list');
+      document.getElementById('empty-cart-msg').classList.toggle('hidden', cart.length > 0);
+      container.innerHTML = cart.map(item => `
+        <div class="flex items-center justify-between p-3 rounded-xl ${item.crossed ? 'bg-slate-900/40 opacity-50' : 'bg-slate-900'} border border-slate-800">
+          <div class="flex items-center gap-3 flex-1" onclick="toggleCross(${item.id})">
+            <span class="text-xs font-bold ${item.crossed ? 'line-through text-slate-500' : 'text-slate-100'}">${item.name}</span>
+            <span class="text-xs font-extrabold ${item.crossed ? 'line-through text-slate-600' : 'text-emerald-400'}">${fmt(item.price)}</span>
+          </div>
+          <button onclick="removeItem(${item.id})" class="p-1 text-slate-600 hover:text-rose-400"><i data-lucide="trash" class="w-4 h-4"></i></button>
+        </div>
+      `).join('');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function addQuickProduct() {
+      const n = document.getElementById('quick-prod-name').value.trim() || 'Producto';
+      const p = parseFloat(document.getElementById('quick-prod-price').value);
+      if (p > 0) { cart.unshift({ id: Date.now(), name: n, price: p, crossed: false }); document.getElementById('quick-prod-name').value = ''; document.getElementById('quick-prod-price').value = ''; playBeep('add'); render(); }
+    }
+
+    function toggleCross(id) { cart = cart.map(i => i.id === id ? { ...i, crossed: !i.crossed } : i); render(); }
+    function removeItem(id) { cart = cart.filter(i => i.id !== id); render(); }
+    const undoStack = [];
+
+    function snapshotState() { return JSON.stringify({ cart, planner, history }); }
+
+    function updateUndoBtn() {
+      document.getElementById('undo-btn').classList.toggle('hidden', undoStack.length === 0);
+    }
+
+    function withUndo(fn) {
+      const before = snapshotState();
+      const result = fn();
+      if (snapshotState() !== before) {
+        undoStack.push(before);
+        if (undoStack.length > 20) undoStack.shift();
+      }
+      updateUndoBtn();
+      return result;
+    }
+
+    function undoLast() {
+      const prev = undoStack.pop();
+      if (prev === undefined) return;
+      const data = JSON.parse(prev);
+      cart = data.cart;
+      planner = data.planner;
+      history = data.history;
+      render();
+      updateUndoBtn();
+    }
+
+    ['addQuickProduct', 'toggleCross', 'removeItem', 'addPlannedItem', 'removePlannedItem',
+     'moveToCart', 'finishShopping', 'deleteHistoryItem', 'deletePurchase', 'addOcrItem',
+     'finishLiveScan', 'confirmYes'].forEach(name => {
+      const original = window[name];
+      if (typeof original !== 'function') return;
+      window[name] = function (...args) {
+        return withUndo(() => original.apply(this, args));
+      };
+    });
+
+    function clearCart() { askConfirm('¿Vaciar carrito?', () => { cart = []; render(); }); }
+
+    function renderPlanner() {
+      document.getElementById('planner-list').innerHTML = planner.length === 0
+        ? '<p class="text-center text-xs text-slate-500 py-6">La lista previa está vacía</p>'
+        : planner.map(i => `
+        <div class="flex items-center justify-between gap-2 p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs">
+          <div class="min-w-0"><span class="font-bold text-white block truncate">${esc(i.name)}</span><span class="text-slate-400">${i.price > 0 ? fmt(i.price) : 'Sin precio'}</span></div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button onclick="moveToCart(${i.id})" class="px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded-lg font-bold">+ Carrito</button>
+            <button onclick="removePlannedItem(${i.id})" class="p-1 text-slate-600 hover:text-rose-400" title="Quitar de la lista"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+          </div>
+        </div>
+      `).join('');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function addPlannedItem() {
+      const n = document.getElementById('plan-prod-name').value.trim();
+      const p = parseFloat(document.getElementById('plan-prod-price').value) || 0;
+      if (n) { planner.push({ id: Date.now(), name: n, price: p }); document.getElementById('plan-prod-name').value = ''; render(); }
+    }
+
+    function removePlannedItem(id) { planner = planner.filter(p => p.id !== id); render(); }
+
+    function moveToCart(id) {
+      const i = planner.find(p => p.id === id);
+      if (i) { cart.unshift({ id: Date.now(), name: i.name, price: i.price, crossed: false }); planner = planner.filter(p => p.id !== id); playBeep('add'); render(); }
+    }
+
+    function finishShopping() {
+      const active = cart.filter(i => !i.crossed);
+      if (active.length === 0) return;
+      history.unshift({ id: Date.now(), date: new Date().toLocaleDateString(), total: active.reduce((a,b)=>a+b.price,0), itemsCount: active.length, items: active });
+      cart = []; render(); switchTab('history');
+    }
+
+    const openPurchases = new Set();
+
+    function setPurchaseOpen(hid, isOpen) {
+      if (isOpen) openPurchases.add(hid); else openPurchases.delete(hid);
+    }
+
+    function renderHistory() {
+      const box = document.getElementById('history-list');
+      if (history.length === 0) {
+        box.innerHTML = '<p class="text-center text-xs text-slate-500 py-6">Todavía no guardaste compras</p>';
+        return;
+      }
+      box.innerHTML = history.map(h => `
+        <details class="bg-slate-900 rounded-xl border border-slate-800 text-xs" ${openPurchases.has(h.id) ? 'open' : ''} ontoggle="setPurchaseOpen(${h.id}, this.open)">
+          <summary class="flex justify-between items-center gap-2 p-3 font-bold text-white cursor-pointer list-none">
+            <span class="min-w-0">${esc(h.date)} <span class="text-slate-500 font-normal">· ${(h.items || []).length} productos</span></span>
+            <span class="flex items-center gap-2 shrink-0">
+              <span class="text-emerald-400">${fmt(h.total)}</span>
+              <button onclick="event.preventDefault(); event.stopPropagation(); deletePurchase(${h.id})" class="p-1 text-slate-600 hover:text-rose-400" title="Borrar compra"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            </span>
+          </summary>
+          <ul class="px-3 pb-3 pt-2 border-t border-slate-800 space-y-1">
+            ${(h.items || []).map(it => `
+              <li class="flex justify-between items-center gap-2 text-slate-300">
+                <span class="truncate">${esc(it.name)}</span>
+                <span class="flex items-center gap-2 shrink-0">
+                  <span class="text-slate-400">${fmt(it.price)}</span>
+                  <button onclick="deleteHistoryItem(${h.id}, ${it.id})" class="p-0.5 text-slate-600 hover:text-rose-400" title="Borrar producto"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+                </span>
+              </li>
+            `).join('') || '<li class="text-slate-500">Sin detalle de productos</li>'}
+          </ul>
+        </details>
+      `).join('');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function deletePurchase(hid) {
+      askConfirm('¿Borrar esta compra del historial?', () => {
+        history = history.filter(h => h.id !== hid);
+        openPurchases.delete(hid);
+        render();
+      });
+    }
+
+    function deleteHistoryItem(hid, iid) {
+      history = history.map(h => {
+        if (h.id !== hid) return h;
+        const items = (h.items || []).filter(it => it.id !== iid);
+        const total = items.reduce((a, b) => a + b.price, 0);
+        return { ...h, items, itemsCount: items.length, total };
+      }).filter(h => (h.items || []).length > 0);
+      render();
+    }
+
+    function openBudgetModal() { document.getElementById('modal-budget').classList.remove('hidden'); }
+    function closeBudgetModal() { document.getElementById('modal-budget').classList.add('hidden'); }
+    function saveBudget() { budget = parseFloat(document.getElementById('budget-input').value) || budget; closeBudgetModal(); render(); }
+    let ocrLibPromise = null;
+    function loadOcrLib() {
+      if (window.Tesseract) return Promise.resolve();
+      if (!ocrLibPromise) {
+        ocrLibPromise = new Promise((resolve, reject) => {
+          const sc = document.createElement('script');
+          sc.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+          sc.onload = resolve;
+          sc.onerror = () => reject(new Error('lib'));
+          document.head.appendChild(sc);
+        });
+      }
+      return ocrLibPromise;
+    }
+
+    function showOcrState(state) {
+      document.getElementById('modal-ocr').classList.remove('hidden');
+      document.getElementById('ocr-loading').classList.toggle('hidden', state !== 'loading');
+      document.getElementById('ocr-form').classList.toggle('hidden', state !== 'form');
+    }
+    function triggerOcrScan() {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) openLiveScan();
+      else document.getElementById('ocr-file').click();
+    }
+
+    let scanStream = null, scanWorker = null, scanTimer = null, scanBusy = false;
+
+    function setScanStatus(t) { document.getElementById('scan-status').innerText = t; }
+
+    async function openLiveScan() {
+      document.getElementById('modal-scan').classList.remove('hidden');
+      setScanStatus('Abriendo cámara...');
+      try {
+        scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+        const v = document.getElementById('scan-video');
+        v.srcObject = scanStream;
+        await v.play();
+        setScanStatus('Buscando precio...');
+        await loadOcrLib();
+        if (!scanWorker) scanWorker = await Tesseract.createWorker('spa');
+        if (!scanStream) return;
+        scanTimer = setInterval(scanTick, 1200);
+      } catch (err) {
+        closeLiveScan();
+        document.getElementById('ocr-file').click();
+      }
+    }
+
+    async function scanTick() {
+      if (!scanStream || scanBusy) return;
+      const v = document.getElementById('scan-video');
+      if (!v.videoWidth) return;
+      scanBusy = true;
+      try {
+        const c = document.getElementById('scan-canvas');
+        const w = Math.min(v.videoWidth, 900);
+        c.width = w;
+        c.height = Math.round(v.videoHeight * w / v.videoWidth);
+        c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+        const { data } = await scanWorker.recognize(c);
+        if (!scanStream) return;
+        const parsed = parseLabel(data.text);
+        if (parsed.price > 0 && /\$/.test(data.text)) {
+          finishLiveScan({ name: parsed.name || 'Producto', price: parsed.price });
+        }
+      } catch (e) {
+      } finally {
+        scanBusy = false;
+      }
+    }
+
+    function finishLiveScan(item) {
+      closeLiveScan();
+      cart.unshift({ id: Date.now(), name: item.name, price: item.price, crossed: false });
+      playBeep('add');
+      render();
+    }
+
+    function closeLiveScan() {
+      clearInterval(scanTimer);
+      scanTimer = null;
+      if (scanStream) { scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
+      document.getElementById('scan-video').srcObject = null;
+      document.getElementById('modal-scan').classList.add('hidden');
+    }
+    function closeOcrModal() { document.getElementById('modal-ocr').classList.add('hidden'); }
+
+    function parseLabel(text) {
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const name = (lines.find(l => /[A-Za-zÁÉÍÓÚáéíóúñÑ]{4,}/.test(l) && !/\d[.,]\d{2}/.test(l)) || '').slice(0, 40);
+      let price = 0;
+      const m = text.match(/\$\s?(\d{1,3}(?:[.\s]\d{3})+|\d+)(?:,(\d{1,2}))?/);
+      if (m) {
+        price = parseFloat(m[1].replace(/[.\s]/g, '') + (m[2] ? '.' + m[2] : ''));
+      } else {
+        const nums = [...text.matchAll(/\d{1,3}(?:\.\d{3})+|\d{3,6}/g)].map(x => parseFloat(x[0].replace(/\./g, '')));
+        price = nums.length ? Math.max(...nums) : 0;
+      }
+      return { name, price: Math.round(price) || 0 };
+    }
+
+    async function handleOcrFile(e) {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      showOcrState('loading');
+      let parsed = { name: '', price: 0 };
+      let status = 'Corregí si hace falta antes de agregarlo.';
+      try {
+        await loadOcrLib();
+        const { data } = await Tesseract.recognize(file, 'spa');
+        parsed = parseLabel(data.text);
+        if (!parsed.name && !parsed.price) status = 'No encontré datos. Cargalo a mano.';
+      } catch (err) {
+        status = 'No pude leer la etiqueta. Cargala a mano.';
+      }
+      document.getElementById('ocr-name').value = parsed.name;
+      document.getElementById('ocr-price').value = parsed.price || '';
+      document.getElementById('ocr-status').innerText = status;
+      showOcrState('form');
+    }
+
+    function addOcrItem() {
+      const n = document.getElementById('ocr-name').value.trim() || 'Producto';
+      const p = parseFloat(document.getElementById('ocr-price').value);
+      if (!(p > 0)) { document.getElementById('ocr-status').innerText = 'Ingresá un precio válido.'; return; }
+      cart.unshift({ id: Date.now(), name: n, price: p, crossed: false });
+      playBeep('add');
+      closeOcrModal();
+      render();
+    }
+
+    let confirmAction = null;
+    function askConfirm(msg, onYes) {
+      confirmAction = onYes;
+      document.getElementById('confirm-msg').innerText = msg;
+      document.getElementById('modal-confirm').classList.remove('hidden');
+    }
+    function closeConfirm() {
+      confirmAction = null;
+      document.getElementById('modal-confirm').classList.add('hidden');
+    }
+    function confirmYes() {
+      const fn = confirmAction;
+      closeConfirm();
+      if (fn) fn();
+    }
+
+    function shareToWsp() {
+      const active = cart.filter(i => !i.crossed);
+      const total = active.reduce((a, b) => a + b.price, 0);
+      let text = `🛒 *La Calculadora de Pipizon*\nTotal: ${fmt(total)} / Tope: ${fmt(budget)}\n`;
+      active.forEach(i => text += `• ${i.name}: ${fmt(i.price)}\n`);
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    }
+
+    function switchTab(t) {
+      ['cart', 'planner', 'history'].forEach(x => {
+        document.getElementById(`view-${x}`).classList.toggle('hidden', x !== t);
+        const btn = document.getElementById(`tab-${x}`);
+        const active = x === t;
+        btn.classList.toggle('border-emerald-500', active);
+        btn.classList.toggle('text-emerald-400', active);
+        btn.classList.toggle('border-transparent', !active);
+        btn.classList.toggle('text-slate-400', !active);
+      });
+    }
+  </script>
+</body>
+</html>
